@@ -31,10 +31,11 @@ tcp_packet *recvpkt;//packet reveived
 sigset_t sigmask;  //signal for timeout
 
 
-void send_packets(int start, int end);
-tcp_packet * make_send_packet(int index);
-void start_timer();
 void resend_packets(int sig);
+void start_timer();
+tcp_packet * make_send_packet(int index);
+void send_packets(int start, int end);
+
 
 
 void resend_packets(int sig)
@@ -43,7 +44,7 @@ void resend_packets(int sig)
     {
         //Resend all packets range between
         //sendBase and nextSeqNum
-        VLOG(INFO, "Timout happend");
+        VLOG(INFO, "Timout happened");
         send_packets(last_ack, last_ack+window_size-1);
         start_timer();
     }
@@ -81,15 +82,16 @@ void init_timer(int delay, void (*sig_handler)(int))
 }
 
 tcp_packet * make_send_packet(int index){
+
     char buffer[DATA_SIZE]; //Buffer after reading packet number packet.
-    tcp_packet *sndpkt; //Create the packet.
     fseek(fp, index * DATA_SIZE, SEEK_SET); //Seek to the correct position
     size_t sz = fread(buffer, 1, DATA_SIZE, fp); //Read the data
-   sndpkt = make_packet(sz); //Create our packet
-   memcpy(sndpkt->data, buffer, sz); //Populate the data section with buffer
-   sndpkt->hdr.seqno = index * DATA_SIZE; //Use byte-level sequence number
+    //tcp_packet *sndpkt; //Create the packet.
+    tcp_packet *sndpkt = make_packet(sz); //Create our packet
+    memcpy(sndpkt->data, buffer, sz); //Populate the data section with buffer
+    sndpkt->hdr.seqno = index * DATA_SIZE; //Use byte-level sequence number
 
-  //last_sent=max_int(last_sent,index);
+  
 
   return(sndpkt);
 }
@@ -108,20 +110,27 @@ void send_packets(int start, int end){
    }
    int serverlen = sizeof(serveraddr);
    if (end >= total_packets) end = total_packets - 1;
-   for (int i = start; i <= end; i ++){
-       /* Create our snpkt */
-       tcp_packet * sndpkt = make_send_packet(i);
-       /*
-        * If the sendto is called for the first time, the system will
-        * will assign a random port number so that server can send its
-        * response to the src port.
-        */
-       if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0,
-                   ( const struct sockaddr *)&serveraddr, serverlen) < 0)
-       {
-           error("sendto");
-       }
-   }
+    
+    while(start <=end){
+    /* Create our snpkt */
+           tcp_packet * sndpkt = make_send_packet(start);
+           if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0,
+                       ( const struct sockaddr *)&serveraddr, serverlen) < 0)
+           {
+               error("sendto");
+           }
+           start++;
+    }
+    
+//   for (int i = start; i <= end; i ++){
+//       /* Create our snpkt */
+//       tcp_packet * sndpkt = make_send_packet(i);
+//       if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0,
+//                   ( const struct sockaddr *)&serveraddr, serverlen) < 0)
+//       {
+//           error("sendto");
+//       }
+//   }
 }
 
 int main (int argc, char **argv)
@@ -173,30 +182,36 @@ int main (int argc, char **argv)
     //Stop and wait protocol
 
     init_timer(RETRY, resend_packets);
-    next_seqno = 0;
-    send_packets(0, window_size-1);//
+    //next_seqno = 0;
+    if(total_packets < window_size - 1){
+        send_packets(0, total_packets - 1);//start sending packets
+    }
+    else{
+        send_packets(0, window_size-1);//start sending packets
+    }
+    
     start_timer();//
     while (1)
     {
-        if(recvfrom(sockfd, buffer, MSS_SIZE, 0,//
+        if(recvfrom(sockfd, buffer, MSS_SIZE, 0,//reads ACK info
             (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0)
          {
              error("recvfrom");
          }
          recvpkt = (tcp_packet *)buffer;
-         int ackno = recvpkt->hdr.ackno;
+         int ackno = recvpkt->hdr.ackno; //gets the ACK number
          //if (recvpkt->hdr.ackno % DATA_SIZE != 0) ackno ++;
          printf("total=%d ackno=%d lastack=%d\n",total_packets, ackno, last_ack);
-         if (ackno > last_ack){ //
-             if (ackno >= total_packets - 1){ //
+         if (ackno > last_ack){ //if it is an ACK for a new packet
+             if (ackno >= total_packets - 1){ //if it is the last ACK then transmission has been done
                  send_packets(-1,-1);
                  printf("Completed transfer\n");
                  break;
              }
              send_packets(last_ack+window_size,ackno+window_size-1);
-             stop_timer();
-             start_timer();
-             last_ack = ackno;
+             stop_timer();// ACK has been received
+             start_timer();// starts a new timer because new packets are sent
+             last_ack = ackno;//update last ACK number
              
          }
     }
