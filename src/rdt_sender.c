@@ -42,7 +42,7 @@ void resend_packets(int sig)
     if (sig == SIGALRM)
     {
         //Resend all packets range between
-        //sendBase and nextSeqNum
+        //last_ack, last_ack+window_size-1
         VLOG(INFO, "Timout happened");
         send_packets(last_ack, last_ack+window_size-1);
         start_timer();
@@ -97,11 +97,11 @@ void send_packets(int start, int end){
     if (end >= total_packets){// make sure end < total
         end = total_packets - 1;
     }
-    while(start <=end){
+    while(start <=end){//packets are in the range
         
     /* Create our snpkt */
-        tcp_packet * sndpkt = make_send_packet(start);
-        if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0,
+        tcp_packet * sndpkt = make_send_packet(start);//create a packet
+        if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0,//send it
                     ( const struct sockaddr *)&serveraddr, serverlen) < 0)
         {
             error("sendto");
@@ -181,7 +181,7 @@ int main (int argc, char **argv)
          }
          recvpkt = (tcp_packet *)buffer;
          ackno = recvpkt->hdr.ackno; //gets the ACK number
-        if (recvpkt->hdr.ackno % DATA_SIZE > 0){
+        if (recvpkt->hdr.ackno % DATA_SIZE > 0){//partial 
             ackno ++;
         }
          printf("total=%d ackno=%d lastack=%d\n",total_packets, ackno, last_ack);
