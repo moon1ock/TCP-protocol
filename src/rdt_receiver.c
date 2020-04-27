@@ -82,12 +82,15 @@ int main(int argc, char **argv) {
      * main loop: wait for a datagram, then echo it
      */
     VLOG(DEBUG, "epoch time, bytes received, sequence number");
-    int* window = (int*)malloc(sizeof(int)*window_size); // circular buffer
+    int* window = (int*)malloc(sizeof(int)*window_size); // will be used as a circular buffer
     
-    for (int i = 0; i < window_size; i++) window[i] = 0; //init
-    int window_start = 0;//head
+    for (int i = 0; i < window_size; i++){
+        window[i] = 0; //init
+    }
     int last_ack = 0;// last ACKed packet number to send to sender
+    int index = 0;
     clientlen = sizeof(clientaddr);
+    int window_start = 0;//start of the queue
     while (1) {
         /*
          * recvfrom: receive a UDP datagram from a client
@@ -99,41 +102,55 @@ int main(int argc, char **argv) {
         }
         recvpkt = (tcp_packet *) buffer;
         assert(get_data_size(recvpkt) <= DATA_SIZE);
-        if ( recvpkt->hdr.data_size == 0) {
-            VLOG(INFO, "End Of File has been reached");
-            fclose(fp);
-            break;
-        }
+        fseek(fp, recvpkt->hdr.seqno, SEEK_SET);
+        fwrite(recvpkt->data, 1, recvpkt->hdr.data_size, fp);//writes packet data into file
+        
+        
         /*
          * sendto: ACK back to the client
          */
         gettimeofday(&tp, NULL);
         VLOG(DEBUG, "%lu, %d, %d", tp.tv_sec, recvpkt->hdr.data_size, recvpkt->hdr.seqno);
-        fseek(fp, recvpkt->hdr.seqno, SEEK_SET);
-        fwrite(recvpkt->data, 1, recvpkt->hdr.data_size, fp);//writes packet data into file
         
-        sndpkt = make_packet(0);
-        int ackno = (recvpkt->hdr.seqno - recvpkt->hdr.data_size) / DATA_SIZE; //number of received segment
-        if (ackno >= last_ack){
-                int index = (window_start + (ackno - last_ack))% window_size;
-                window[index] = 1;
-            
-                int inc = 0;
-                printf("last_ack=%d ackno=%d index=%d window_start=%d\n", last_ack, ackno, index, window_start);
+        
+        int ackno = 0;
+        if(recvpkt->hdr.seqno != 0){
+            ackno =(recvpkt->hdr.seqno - recvpkt->hdr.data_size) / DATA_SIZE; //number of received segment
+        }
+        else{//the first packet recvd
+            ackno = 0;
+            //printf("ifke kirdi\n");
+        }
+        //printf("%d  %d %d data sizzzeeee and seq number ackno\n", recvpkt->hdr.data_size, recvpkt->hdr.seqno, ackno);
+        int interval = 0;
+        if (last_ack<= ackno){ //if new packet
+                
+                window[(window_start + (ackno - last_ack))% window_size] = 1;// mark packet received
+                
+                printf("last_ack=%d ackno=%d index=%d window_start=%d\n", last_ack, (window_start + (ackno - last_ack))% window_size , window_start);
                 while (window[window_start] == 1){
-                    window[window_start] = 0;
-                    window_start = (window_start + 1) % window_size;
-                    inc ++;
+                    interval ++;
+                    window[window_start] = 0; // got ACKed and now renew
+                    window_start = (window_start + 1) % window_size;//goes to the next
                 }
-                printf("After window_start=%d inc=%d\n", window_start, inc);
-                last_ack = last_ack + inc;
+                last_ack = last_ack + interval;
+                printf("After window_start=%d inc=%d\n", window_start, interval);
             }
-            sndpkt->hdr.ackno = last_ack;
+            sndpkt = make_packet(0);
             sndpkt->hdr.ctr_flags = ACK;
+            sndpkt->hdr.ackno = last_ack;
+        
             if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0,
                     (struct sockaddr *) &clientaddr, clientlen) < 0) {
                 error("ERROR in sendto");
             }
+        
+        if ( recvpkt->hdr.data_size == 0) { //check if it is the last packet
+            VLOG(INFO, "End Of File has been reached");
+            fclose(fp);
+            break;
+        }
+        
         }
 
     return 0;
