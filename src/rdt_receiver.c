@@ -102,9 +102,14 @@ int main(int argc, char **argv) {
         }
         recvpkt = (tcp_packet *) buffer;
         assert(get_data_size(recvpkt) <= DATA_SIZE);
-        fseek(fp, recvpkt->hdr.seqno, SEEK_SET);
-        fwrite(recvpkt->data, 1, recvpkt->hdr.data_size, fp);//writes packet data into file
         
+        if ( recvpkt->hdr.data_size == 0) { //check if it is the last packet
+            VLOG(INFO, "End Of File has been reached");
+            fclose(fp);
+            break;
+        }
+        
+       
         
         /*
          * sendto: ACK back to the client
@@ -115,7 +120,8 @@ int main(int argc, char **argv) {
         
         int ackno = 0;
         if(recvpkt->hdr.seqno != 0){
-            ackno =(recvpkt->hdr.seqno - recvpkt->hdr.data_size) / DATA_SIZE; //number of received segment
+            ackno =(recvpkt->hdr.seqno) / DATA_SIZE;
+           // ackno =(recvpkt->hdr.seqno - recvpkt->hdr.data_size) / DATA_SIZE; //number of received segment
         }
         else{//the first packet recvd
             ackno = 0;
@@ -124,32 +130,33 @@ int main(int argc, char **argv) {
         //printf("%d  %d %d data sizzzeeee and seq number ackno\n", recvpkt->hdr.data_size, recvpkt->hdr.seqno, ackno);
         int interval = 0;
         if (last_ack<= ackno){ //if new packet
-                
+               
+            if(window[(window_start + (ackno - last_ack))% window_size] == 0){
+                fseek(fp, recvpkt->hdr.seqno, SEEK_SET);
+                fwrite(recvpkt->data, 1, recvpkt->hdr.data_size, fp);//writes packet data into file
                 window[(window_start + (ackno - last_ack))% window_size] = 1;// mark packet received
+            }
+            
                 
-                printf("last_ack=%d ackno=%d index=%d window_start=%d\n", last_ack, (window_start + (ackno - last_ack))% window_size , window_start);
-                while (window[window_start] == 1){
-                    interval ++;
-                    window[window_start] = 0; // got ACKed and now renew
-                    window_start = (window_start + 1) % window_size;//goes to the next
-                }
-                last_ack = last_ack + interval;
-                printf("After window_start=%d inc=%d\n", window_start, interval);
+            printf("last_ack=%d ackno=%d index=%d window_start=%d\n", last_ack, ackno, (window_start + (ackno - last_ack))% window_size , window_start);
+            while (window[window_start] == 1){
+                interval ++;
+                window[window_start] = 0; // got ACKed and now renew
+                window_start = (window_start + 1) % window_size;//goes to the next
             }
-            sndpkt = make_packet(0);
-            sndpkt->hdr.ctr_flags = ACK;
-            sndpkt->hdr.ackno = last_ack;
-        
-            if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0,
-                    (struct sockaddr *) &clientaddr, clientlen) < 0) {
-                error("ERROR in sendto");
-            }
-        
-        if ( recvpkt->hdr.data_size == 0) { //check if it is the last packet
-            VLOG(INFO, "End Of File has been reached");
-            fclose(fp);
-            break;
+            last_ack = last_ack + interval;
+            printf("After window_start=%d inc=%d\n", window_start, interval);
         }
+        sndpkt = make_packet(0);
+        sndpkt->hdr.ctr_flags = ACK;
+        sndpkt->hdr.ackno = last_ack;
+        
+        if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0,
+                (struct sockaddr *) &clientaddr, clientlen) < 0) {
+            error("ERROR in sendto");
+        }
+        
+        
         
         }
 

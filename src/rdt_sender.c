@@ -19,8 +19,11 @@
 
 int next_seqno=0;
 int send_base=0;
-int window_size = 10;
+double window_size = 1;
+int ssthresh = 64;
 int last_ack = 0;
+int last_packet = 0;
+short slow_start = 1;//1 == slow start; 0 == congestion avoidance
 FILE *fp;
 int sockfd, serverlen, total_packets;//rcvr socket, serveraddrsize, numofpackets
 struct sockaddr_in serveraddr; //server
@@ -42,7 +45,7 @@ void resend_packets(int sig)
     if (sig == SIGALRM)
     {
         //Resend all packets range between
-        //last_ack, last_ack+window_size-1
+        //sendBase and nextSeqNum
         VLOG(INFO, "Timout happened");
         send_packets(last_ack, last_ack+window_size-1);
         start_timer();
@@ -97,11 +100,11 @@ void send_packets(int start, int end){
     if (end >= total_packets){// make sure end < total
         end = total_packets - 1;
     }
-    while(start <=end){//packets are in the range
+    while(start <=end){
         
     /* Create our snpkt */
-        tcp_packet * sndpkt = make_send_packet(start);//create a packet
-        if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0,//send it
+        tcp_packet * sndpkt = make_send_packet(start);
+        if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0,
                     ( const struct sockaddr *)&serveraddr, serverlen) < 0)
         {
             error("sendto");
@@ -161,9 +164,9 @@ int main (int argc, char **argv)
     assert(MSS_SIZE - TCP_HDR_SIZE > 0);
 
     //Stop and wait protocol
-
     init_timer(RETRY, resend_packets);
     //next_seqno = 0;
+    //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     if(total_packets < window_size - 1){
         send_packets(0, total_packets - 1);//start sending packets
     }
@@ -181,14 +184,14 @@ int main (int argc, char **argv)
          }
          recvpkt = (tcp_packet *)buffer;
          ackno = recvpkt->hdr.ackno; //gets the ACK number
-        if (recvpkt->hdr.ackno % DATA_SIZE > 0){//partial 
+        if (recvpkt->hdr.ackno % DATA_SIZE > 0){//very unlikely but still
             ackno ++;
         }
          printf("total=%d ackno=%d lastack=%d\n",total_packets, ackno, last_ack);
          if (ackno > last_ack){ //if it is an ACK for a new packet
-             if (ackno >= total_packets - 1){ //if it is the last ACK then transmission has been successful
+             if (ackno >= total_packets){ //if it is the last ACK then transmission has been successful
                  tcp_packet * sndpkt = make_packet(0); //make an empty packet
-                 if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0, //send empty packet to let receiver know that it is time to say bye
+                 if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0, //send an empty packet to let receiver know that it is time to say good bye
                              ( const struct sockaddr *)&serveraddr, serverlen) < 0)
                  {
                      error("sendto");
