@@ -11,7 +11,7 @@
 
 #include "common.h"
 #include "packet.h"
-int window_size = 10; // scalable window size has, to be confirmed by sender
+int window_size = 100000; // scalable window size has, to be confirmed by sender
 
 /*
  * You ar required to change the implementation to support
@@ -103,12 +103,6 @@ int main(int argc, char **argv) {
         recvpkt = (tcp_packet *) buffer;
         assert(get_data_size(recvpkt) <= DATA_SIZE);
         
-        if ( recvpkt->hdr.data_size == 0) { //check if it is the last packet
-            VLOG(INFO, "End Of File has been reached");
-            fclose(fp);
-            break;
-        }
-        
        
         
         /*
@@ -117,6 +111,11 @@ int main(int argc, char **argv) {
         gettimeofday(&tp, NULL);
         VLOG(DEBUG, "%lu, %d, %d", tp.tv_sec, recvpkt->hdr.data_size, recvpkt->hdr.seqno);
         
+        if ( recvpkt->hdr.data_size == 0) { //check if it is the last packet
+                   VLOG(INFO, "End Of File has been reached");
+                   fclose(fp);
+                   break;
+               }
         
         int ackno = 0;
         if(recvpkt->hdr.seqno != 0){
@@ -125,7 +124,6 @@ int main(int argc, char **argv) {
         }
         else{//the first packet recvd
             ackno = 0;
-            //printf("ifke kirdi\n");
         }
         //printf("%d  %d %d data sizzzeeee and seq number ackno\n", recvpkt->hdr.data_size, recvpkt->hdr.seqno, ackno);
         int interval = 0;

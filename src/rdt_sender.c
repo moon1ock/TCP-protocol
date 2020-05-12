@@ -22,7 +22,9 @@ int send_base=0;
 double window_size = 1;
 int ssthresh = 64;
 int last_ack = 0;
+int last_sent = -1;
 int last_packet = 0;
+int duplicate = 0;
 short slow_start = 1;//1 == slow start; 0 == congestion avoidance
 FILE *fp;
 int sockfd, serverlen, total_packets;//rcvr socket, serveraddrsize, numofpackets
@@ -37,6 +39,9 @@ void resend_packets(int sig);
 tcp_packet * make_send_packet(int index);
 void start_timer();
 void send_packets(int start, int end);
+int max(int a, int b){
+    return (a > b)? a : b;
+}
 
 
 
@@ -47,11 +52,14 @@ void resend_packets(int sig)
         //Resend all packets range between
         //sendBase and nextSeqNum
         VLOG(INFO, "Timout happened");
-        send_packets(last_ack, last_ack+window_size-1);
+        ssthresh = (int)window_size / 2;
+        slow_start = 0;
+        window_size = 1;
+        send_packets(last_ack, last_ack + (int)floor(window_size - 1));
         start_timer();
+        
     }
 }
-
 
 void start_timer()
 {
@@ -109,6 +117,7 @@ void send_packets(int start, int end){
         {
             error("sendto");
         }
+        last_sent = start;
         start++;
     }
     
@@ -144,8 +153,6 @@ int main (int argc, char **argv)
     if (sockfd < 0) {
         error("ERROR opening socket");
     }
-        
-
 
     /* initialize server server details */
     bzero((char *) &serveraddr, sizeof(serveraddr));
@@ -174,6 +181,7 @@ int main (int argc, char **argv)
         send_packets(0, window_size-1);//start sending packets
     }
     int ackno = 0;
+    double increase_cwnd = 0;
     start_timer();//
     while (1)
     {
@@ -184,11 +192,14 @@ int main (int argc, char **argv)
          }
          recvpkt = (tcp_packet *)buffer;
          ackno = recvpkt->hdr.ackno; //gets the ACK number
-        if (recvpkt->hdr.ackno % DATA_SIZE > 0){//very unlikely but still
-            ackno ++;
-        }
-         printf("total=%d ackno=%d lastack=%d\n",total_packets, ackno, last_ack);
+         increase_cwnd = ackno - last_ack;
+        //printf("inc == %f\n", increase_cwnd);
+         
+
+         printf("total=%d ackno=%d lastack=%d last_sent=%d ",total_packets, ackno, last_ack, last_sent);
+        printf("window fucking size = %d\n", (int)window_size);
          if (ackno > last_ack){ //if it is an ACK for a new packet
+             last_ack = ackno;//update last ACK number
              if (ackno >= total_packets){ //if it is the last ACK then transmission has been successful
                  tcp_packet * sndpkt = make_packet(0); //make an empty packet
                  if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0, //send an empty packet to let receiver know that it is time to say good bye
@@ -199,11 +210,34 @@ int main (int argc, char **argv)
                  printf("Completed transfer\n");
                  break;
              }
-             else { // continue sending packets
-                 send_packets(last_ack+window_size,ackno+window_size-1);
-                 stop_timer();// ACK has been received
-                 start_timer();// starts a new timer because new packets are sent
-                 last_ack = ackno;//update last ACK number
+             stop_timer();// ACK has been received
+//--------------------------------------------------------------------------------------------------------------------------------------
+             if(slow_start == 0){//congestion avodance mode (or fast recovery)
+                 window_size += 1 / window_size;
+             }
+             else{//slow start
+                 window_size ++;
+                 if(ssthresh < window_size){
+                     slow_start = 0; //switch to congestion avoidance
+                 }
+             }
+              // continue sending packets
+            last_sent  = max(last_ack, last_sent + 1);
+             int end = (last_ack + (int)floor(window_size - 1));
+            send_packets(last_sent ,end);
+            printf("send range from %d to %d\n", last_sent , end);
+            start_timer();// starts a new timer because new packets are sent
+             duplicate = 0;
+         }
+         else if(ackno == last_ack){
+             duplicate++;
+             if(duplicate > 2){// fast recovery
+                 slow_start = 0;
+                 last_sent = ackno ;
+                 ssthresh = (int)window_size / 2;
+                 window_size = ssthresh;
+                 int end = (last_ack + (int)floor(window_size - 1));
+                 send_packets(ackno, end);
              }
          }
     }
