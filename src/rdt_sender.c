@@ -1,4 +1,4 @@
-#include <stdio.h>
+ #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,7 +59,7 @@ void resend_packets(int sig)
         slow_start = 1;
         window_size = 1;
         send_packets(last_ack, last_ack + (int)(window_size - 1));
-        start_timer();
+        //start_timer();
     }
 }
 
@@ -175,11 +175,11 @@ int main (int argc, char **argv)
 
     //Stop and wait protocol
     init_timer(RETRY, resend_packets);
-    FILE *csv;
-    csv  = fopen("thput.csv", "w");
-    if (csv == NULL) {
-       error("thput.csv");
-    }
+    //FILE *csv;
+//    csv  = fopen("cwnd.csv", "w");
+//    if (csv == NULL) {
+//       error("cwnd.csv");
+//    }
     //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     send_packets(0, min(total_packets, (int)window_size) - 1);
     int ackno = 0;
@@ -188,7 +188,7 @@ int main (int argc, char **argv)
     while (1)
     {
        // fputs(itoa((int)(window_size - 0.5)), csv);
-        fprintf(csv, "%d\n", (int)(window_size));
+//        fprintf(csv, "%d\n", (int)(window_size));
         if(recvfrom(sockfd, buffer, MSS_SIZE, 0,//receive packet
             (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0)
          {
@@ -200,9 +200,10 @@ int main (int argc, char **argv)
          
 
          printf("total=%d ackno=%d lastack=%d last_sent=%d ",total_packets, ackno, last_ack, last_sent);
-        printf("window fucking size = %d\n", (int)window_size);
+        printf("window size = %d\n", (int)window_size);
          if (ackno > last_ack){ //if it is an ACK for a new packet
              last_ack = ackno;//update last ACK number
+             stop_timer();// ACK has been received
              if (ackno >= total_packets){ //if it is the last ACK then transmission has been successful
                  tcp_packet * sndpkt = make_packet(0); //make an empty packet
                  if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0, //send an empty packet to let receiver know that it is time to say good bye
@@ -211,17 +212,16 @@ int main (int argc, char **argv)
                      error("sendto");
                  }
                  printf("Completed transfer\n");
-                 fclose(csv);
+//                 fclose(csv);
                  break;
              }
-             stop_timer();// ACK has been received
 //--------------------------------------------------------------------------------------------------------------------------------------
              if(slow_start == 0){//congestion avodance mode (or fast recovery)
                  window_size += increase_cwnd / window_size;
              }
              else{//slow start
                  window_size += increase_cwnd;
-                 if(ssthresh < window_size){
+                 if(ssthresh <= window_size){
                      slow_start = 0; //switch to congestion avoidance
                  }
              }
