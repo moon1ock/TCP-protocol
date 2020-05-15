@@ -11,7 +11,7 @@
 
 #include "common.h"
 #include "packet.h"
-int window_size = 100000; // scalable window size has, to be confirmed by sender
+int window_size = 100000; // rcvr window size
 
 /*
  * You ar required to change the implementation to support

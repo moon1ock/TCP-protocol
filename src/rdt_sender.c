@@ -20,7 +20,7 @@
 int next_seqno=0;
 int send_base=0;
 double window_size = 1;
-int ssthresh = 64;
+double ssthresh = 64;
 int last_ack = 0;
 int last_sent = -1;
 int last_packet = 0;
@@ -46,7 +46,9 @@ int min(int a, int b){
     return (a < b)? a : b;
 }
 
-
+double maxd(double a, double b){
+    return a > b)? a : b;
+}
 
 void resend_packets(int sig)
 {
@@ -55,10 +57,10 @@ void resend_packets(int sig)
         //Resend all packets range between
         //lastack and lastack + windowsize
         VLOG(INFO, "Timout happened");
-        ssthresh = max(2, (int)window_size / 2);
+        ssthresh = maxd(2.0, window_size / 2);
         slow_start = 1;
         window_size = 1;
-        send_packets(last_ack, last_ack + (int)(window_size - 1));
+        send_packets(1 + last_sent, last_ack + (int)(window_size - 1));
         //start_timer();
     }
 }
@@ -91,9 +93,11 @@ void init_timer(int delay, void (*sig_handler)(int))
 
     sigemptyset(&sigmask);
     sigaddset(&sigmask, SIGALRM);
+   
 }
 
 tcp_packet * make_send_packet(int index){
+    last_sent = max(index, last_sent);
     fseek(fp, index * DATA_SIZE, SEEK_SET); //Seek to the correct position
     char buffer[DATA_SIZE]; //Buffer after reading packet number packet.
     size_t sz = fread(buffer, 1, DATA_SIZE, fp); //Read the data
@@ -114,7 +118,7 @@ void send_packets(int start, int end){
     if(start > end){
         return;
     }
-    while(start <=end && start <= total_packets - 1){
+    while(start <= end) {
         
     /* Create our snpkt */
         tcp_packet * sndpkt = make_send_packet(start);
@@ -123,7 +127,6 @@ void send_packets(int start, int end){
         {
             error("sendto");
         }
-        last_sent = start;
         start++;
     }
 
@@ -217,28 +220,29 @@ int main (int argc, char **argv)
              }
 //--------------------------------------------------------------------------------------------------------------------------------------
              if(slow_start == 0){//congestion avodance mode (or fast recovery)
-                 window_size += increase_cwnd / window_size;
+                 window_size += (acko - last_ack) / window_size;
              }
              else{//slow start
-                 window_size += increase_cwnd;
+                 window_size += (ackno - last_ack;
                  if(ssthresh <= window_size){
                      slow_start = 0; //switch to congestion avoidance
                  }
              }
               // continue sending packets
-            last_sent  = max(last_ack, last_sent + 1);
+            last_sent  = max(last_ack - 1, last_sent);
              int end = (last_ack + (int)(window_size - 1));
-            send_packets(last_sent ,end);
+            send_packets(last_sent + 1 ,end);
             start_timer();// starts a new timer because new packets are sent
              duplicate = 0;
          }
          else if(ackno == last_ack){
              duplicate++;
-             if(duplicate > 2){// fast recovery
-                 slow_start = 0;
-                 last_sent = ackno ;
-                 ssthresh = max(2, (int)window_size / 2);
-                 window_size = ssthresh;
+             if(duplicate > 2){// fast retrans
+                 duplicate = 0;
+                 slow_start = 1;
+                 last_sent = ackno - 1;
+                 ssthresh = maxd(2.0, window_size / 2);
+                 window_size = 1.0;
                  int end = (last_ack + (int)(window_size - 1));
                  send_packets(ackno, end);
              }
