@@ -47,7 +47,7 @@ int min(int a, int b){
 }
 
 double maxd(double a, double b){
-    return a > b)? a : b;
+    return (a > b)? a : b;
 }
 
 void resend_packets(int sig)
@@ -61,7 +61,8 @@ void resend_packets(int sig)
         slow_start = 1;
         window_size = 1;
         send_packets(1 + last_sent, last_ack + (int)(window_size - 1));
-        //start_timer();
+        start_timer();
+        last_sent = last_ack - 1;
     }
 }
 
@@ -205,7 +206,7 @@ int main (int argc, char **argv)
          printf("total=%d ackno=%d lastack=%d last_sent=%d ",total_packets, ackno, last_ack, last_sent);
         printf("window size = %d\n", (int)window_size);
          if (ackno > last_ack){ //if it is an ACK for a new packet
-             last_ack = ackno;//update last ACK number
+             
              stop_timer();// ACK has been received
              if (ackno >= total_packets){ //if it is the last ACK then transmission has been successful
                  tcp_packet * sndpkt = make_packet(0); //make an empty packet
@@ -220,14 +221,15 @@ int main (int argc, char **argv)
              }
 //--------------------------------------------------------------------------------------------------------------------------------------
              if(slow_start == 0){//congestion avodance mode (or fast recovery)
-                 window_size += (acko - last_ack) / window_size;
+                 window_size += (ackno - last_ack) / window_size;
              }
              else{//slow start
-                 window_size += (ackno - last_ack;
+                 window_size += (ackno - last_ack);
                  if(ssthresh <= window_size){
                      slow_start = 0; //switch to congestion avoidance
                  }
              }
+             last_ack = ackno;//update last ACK number
               // continue sending packets
             last_sent  = max(last_ack - 1, last_sent);
              int end = (last_ack + (int)(window_size - 1));
@@ -239,12 +241,13 @@ int main (int argc, char **argv)
              duplicate++;
              if(duplicate > 2){// fast retrans
                  duplicate = 0;
-                 slow_start = 1;
+                 slow_start = 0;
                  last_sent = ackno - 1;
                  ssthresh = maxd(2.0, window_size / 2);
-                 window_size = 1.0;
+                 window_size = ssthresh;
                  int end = (last_ack + (int)(window_size - 1));
                  send_packets(ackno, end);
+                 start_timer();
              }
          }
     }
