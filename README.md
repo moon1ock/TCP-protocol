@@ -8,8 +8,13 @@ Implementation of a TCP protocol
 4. In case ACK is not received at the sender it resends the corresponding packets
 5. To increase the efficiency of a file transmission we implemented congestion controll
 
-All tests transmissions resulted in correct file receives with the same checksums.
+All test transmissions resulted in correct file receives with the same checksums.
 
+You can see cwnd chages in cwnd_size_plot.png in our repository as well as efficient exploitation of throughput in throughput_plot.png
+
+The sender puts window sizes with timestamps into csv file. To build the plot run plot_cwnd.py at the same directory as cwnd.csv.
+
+To plot the througput use wireshark.
 
 Congestion controll mechanisms
 
