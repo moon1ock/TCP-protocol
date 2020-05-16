@@ -244,10 +244,10 @@ int main (int argc, char **argv)
              duplicate++;
              if(duplicate > 2){// fast retrans
                  duplicate = 0;
-                 slow_start = 0;
+                 slow_start = 1;
                  last_sent = ackno - 1;
                  ssthresh = maxd(2.0, window_size / 2);
-                 window_size = ssthresh;
+                 window_size = 1;
                  int end = (last_ack + (int)(window_size - 1));
                  send_packets(ackno, end);
                  start_timer();
