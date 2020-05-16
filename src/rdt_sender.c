@@ -30,6 +30,7 @@ FILE *fp;
 int sockfd, serverlen, total_packets;//rcvr socket, serveraddrsize, numofpackets
 struct sockaddr_in serveraddr; //server
 struct itimerval timer; //timer
+struct timeval time_check;
 tcp_packet *sndpkt;//sent packet
 tcp_packet *recvpkt;//packet reveived
 sigset_t sigmask;  //signal for timeout
@@ -179,20 +180,22 @@ int main (int argc, char **argv)
 
     //Stop and wait protocol
     init_timer(RETRY, resend_packets);
-    //FILE *csv;
-//    csv  = fopen("cwnd.csv", "w");
-//    if (csv == NULL) {
-//       error("cwnd.csv");
-//    }
+    FILE *csv;
+    csv  = fopen("cwnd.csv", "w");
+    if (csv == NULL) {
+       error("cwnd.csv");
+    }
     //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     send_packets(0, min(total_packets, (int)window_size) - 1);
     int ackno = 0;
-    double increase_cwnd = 0;
+    int increase_cwnd = 0;
     start_timer();//
     while (1)
     {
        // fputs(itoa((int)(window_size - 0.5)), csv);
-//        fprintf(csv, "%d\n", (int)(window_size));
+    	gettimeofday(&time_check, NULL);
+    	long long time = time_check.tv_sec*1000LL+(time_check.tv_usec / 1000.0);
+        fprintf(csv, "%llu, %d\n", time, (int)(window_size));
         if(recvfrom(sockfd, buffer, MSS_SIZE, 0,//receive packet
             (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0)
          {
@@ -216,15 +219,15 @@ int main (int argc, char **argv)
                      error("sendto");
                  }
                  printf("Completed transfer\n");
-//                 fclose(csv);
+                 fclose(csv);
                  break;
              }
 //--------------------------------------------------------------------------------------------------------------------------------------
              if(slow_start == 0){//congestion avodance mode (or fast recovery)
-                 window_size += (ackno - last_ack) / window_size;
+                 window_size += (increase_cwnd) / window_size;
              }
              else{//slow start
-                 window_size += (ackno - last_ack);
+                 window_size += (increase_cwnd);
                  if(ssthresh <= window_size){
                      slow_start = 0; //switch to congestion avoidance
                  }
