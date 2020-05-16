@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
     /*
      * main loop: wait for a datagram, then echo it
      */
-    VLOG(DEBUG, "epoch time, bytes received, sequence number");
+    VLOG(DEBUG, "epoch time,  data size,  seqno  \n");
     int* window = (int*)malloc(sizeof(int)*window_size); // will be used as a circular buffer
     
     for (int i = 0; i < window_size; i++){
@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
         VLOG(DEBUG, "%lu, %d, %d", tp.tv_sec, recvpkt->hdr.data_size, recvpkt->hdr.seqno);
         
         if ( recvpkt->hdr.data_size == 0) { //check if it is the last packet
-                   VLOG(INFO, "End Of File has been reached");
+                   VLOG(INFO, "Successfully received the file!");
                    fclose(fp);
                    break;
                }
@@ -120,12 +120,10 @@ int main(int argc, char **argv) {
         int ackno = 0;
         if(recvpkt->hdr.seqno != 0){
             ackno =(recvpkt->hdr.seqno) / DATA_SIZE;
-           // ackno =(recvpkt->hdr.seqno - recvpkt->hdr.data_size) / DATA_SIZE; //number of received segment
-        }
-        else{//the first packet recvd
+           }
+        else{//the very first packet recvd
             ackno = 0;
         }
-        //printf("%d  %d %d data sizzzeeee and seq number ackno\n", recvpkt->hdr.data_size, recvpkt->hdr.seqno, ackno);
         int interval = 0;
         if (last_ack<= ackno){ //if new packet
                
@@ -136,14 +134,12 @@ int main(int argc, char **argv) {
             }
             
                 
-            printf("last_ack=%d ackno=%d index=%d window_start=%d\n", last_ack, ackno, (window_start + (ackno - last_ack))% window_size , window_start);
             while (window[window_start] == 1){
                 interval ++;
                 window[window_start] = 0; // got ACKed and now renew
                 window_start = (window_start + 1) % window_size;//goes to the next
             }
             last_ack = last_ack + interval;
-            printf("After window_start=%d inc=%d\n", window_start, interval);
         }
         sndpkt = make_packet(0);
         sndpkt->hdr.ctr_flags = ACK;

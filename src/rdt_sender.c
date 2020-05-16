@@ -56,7 +56,7 @@ void resend_packets(int sig)
     if (sig == SIGALRM)
     {
         //Resend all packets range between
-        //lastack and lastack + windowsize
+        //last_sent + 1 and lastack + windowsize -1
         VLOG(INFO, "Timout happened");
         ssthresh = maxd(2.0, window_size / 2);
         slow_start = 1;
@@ -116,7 +116,6 @@ void send_packets(int start, int end){
     if (end > total_packets - 1){// make sure end < total
         end = total_packets - 1;
     }
-    printf("start = %d end = %d\n", start , end);
     if(start > end){
         return;
     }
@@ -140,7 +139,7 @@ int main (int argc, char **argv)
     int portno;
     char *hostname;
     char buffer[DATA_SIZE];
-    //FILE *fp;
+   
 
     /* check command line arguments */
     if (argc != 4) {
@@ -190,9 +189,9 @@ int main (int argc, char **argv)
     int ackno = 0;
     int increase_cwnd = 0;
     start_timer();//
+    printf("Started sending packets \n");
     while (1)
     {
-       // fputs(itoa((int)(window_size - 0.5)), csv);
     	gettimeofday(&time_check, NULL);
     	long long time = time_check.tv_sec*1000LL+(time_check.tv_usec / 1000.0);
         fprintf(csv, "%llu, %d\n", time, (int)(window_size));
@@ -204,10 +203,8 @@ int main (int argc, char **argv)
          recvpkt = (tcp_packet *)buffer;
          ackno = recvpkt->hdr.ackno; //gets the ACK number
          increase_cwnd = ackno - last_ack;
-         
+         printf("total_packets = %d  ackno = %d last_ack = %d last_sent = %d\n", total_packets, ackno, last_ack, last_sent);
 
-         printf("total=%d ackno=%d lastack=%d last_sent=%d ",total_packets, ackno, last_ack, last_sent);
-        printf("window size = %d\n", (int)window_size);
          if (ackno > last_ack){ //if it is an ACK for a new packet
              
              stop_timer();// ACK has been received
