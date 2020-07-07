@@ -1,4 +1,4 @@
-# Project2-Andriy-Nurgazy
+# TCP protocol implemented w/ advancements 
 Implementation of a TCP protocol
 
 * The main features of our TCP program
